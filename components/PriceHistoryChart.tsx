@@ -12,7 +12,11 @@ import {
   Legend,
 } from 'recharts';
 import { Clock, Loader2, TrendingUp, AlertCircle } from 'lucide-react';
-import { FUEL_COLORS, FUEL_LABELS } from '@/lib/types';
+import { FUEL_COLORS, FUELS as FUEL_DEFS } from '@/lib/types';
+
+const FUEL_LABEL: Record<string, string> = Object.fromEntries(FUEL_DEFS.map((f) => [f.key, f.label]));
+// E10 maps to SP95 label
+FUEL_LABEL['E10'] = 'SP95 / E10';
 
 const AVAILABLE_FUELS = ['SP95', 'Gazole', 'E10', 'SP98'];
 const CURRENT_YEAR = new Date().getFullYear();
@@ -82,7 +86,7 @@ export default function PriceHistoryChart() {
         {payload.map((p) => (
           <div key={p.name} className="flex items-center gap-2 text-sm">
             <div className="w-2 h-2 rounded-full" style={{ background: p.color }} />
-            <span className="text-slate-400">{FUEL_LABELS[p.name] ?? p.name}</span>
+            <span className="text-slate-400">{FUEL_LABEL[p.name] ?? p.name}</span>
             <span className="font-bold text-white ml-auto pl-4">
               {p.value?.toFixed(3)} €/L
             </span>
@@ -149,7 +153,7 @@ export default function PriceHistoryChart() {
                 className="w-2 h-2 rounded-full"
                 style={{ background: activeFuels.includes(fuel) ? FUEL_COLORS[fuel] : '#4b5563' }}
               />
-              {FUEL_LABELS[fuel] ?? fuel}
+              {FUEL_LABEL[fuel] ?? fuel}
             </button>
           ))}
         </div>

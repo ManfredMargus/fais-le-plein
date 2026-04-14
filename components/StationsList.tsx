@@ -2,7 +2,10 @@
 
 import { useState } from 'react';
 import { MapPin, Clock, Star, ChevronDown, ChevronUp, Zap } from 'lucide-react';
-import { Station, FUEL_LABELS, FUEL_ICONS } from '@/lib/types';
+import { Station, FUELS as FUEL_DEFS } from '@/lib/types';
+
+const FUEL_LABEL: Record<string, string> = Object.fromEntries(FUEL_DEFS.map((f) => [f.key, f.label]));
+const FUEL_ICON: Record<string, string> = Object.fromEntries(FUEL_DEFS.map((f) => [f.key, f.emoji]));
 import { formatPrice, formatDistance, formatDate, getPriceLevel } from '@/lib/utils';
 
 interface Props {
@@ -44,7 +47,7 @@ export default function StationsList({ stations, selectedFuel, min, max }: Props
             Stations <span className="gradient-text">proches</span>
           </h2>
           <p className="text-slate-500 text-sm mt-0.5">
-            {stations.length} stations · {FUEL_LABELS[selectedFuel] ?? selectedFuel}
+            {stations.length} stations · {FUEL_LABEL[selectedFuel] ?? selectedFuel}
           </p>
         </div>
         <div className="flex gap-2">
@@ -187,7 +190,7 @@ export default function StationsList({ stations, selectedFuel, min, max }: Props
                         }`}
                       >
                         <div className="text-xs text-slate-500 mb-0.5">
-                          {FUEL_ICONS[fuel]} {FUEL_LABELS[fuel] ?? fuel}
+                          {FUEL_ICON[fuel]} {FUEL_LABEL[fuel] ?? fuel}
                         </div>
                         <div
                           className={`font-bold text-sm ${fuel === selectedFuel ? 'text-orange-400' : 'text-slate-300'}`}
