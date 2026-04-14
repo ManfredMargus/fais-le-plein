@@ -3,7 +3,7 @@
 import dynamic from 'next/dynamic';
 import { useState } from 'react';
 import { Loader2, Settings2, MapPin, Route } from 'lucide-react';
-import { Station, FUEL_LABELS } from '@/lib/types';
+import { Station, FUELS as FUEL_DEFS } from '@/lib/types';
 
 // Leaflet cannot be server-side rendered
 const MapView = dynamic(() => import('./MapView'), {
@@ -31,7 +31,6 @@ interface Props {
 }
 
 const RADIUS_OPTIONS = [2, 5, 10, 20, 50];
-const FUELS = ['SP95', 'E10', 'Gazole', 'SP98', 'E85', 'GPLc'];
 
 export default function MapSection({
   stations,
@@ -81,17 +80,17 @@ export default function MapSection({
                   Carburant
                 </h3>
                 <div className="space-y-1">
-                  {FUELS.map((fuel) => (
+                  {FUEL_DEFS.map(({ key, label, emoji }) => (
                     <button
-                      key={fuel}
-                      onClick={() => onFuelChange(fuel)}
+                      key={key}
+                      onClick={() => onFuelChange(key)}
                       className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-all ${
-                        selectedFuel === fuel
+                        selectedFuel === key
                           ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30'
                           : 'text-slate-400 hover:text-white hover:bg-white/5'
                       }`}
                     >
-                      {FUEL_LABELS[fuel] ?? fuel}
+                      {emoji} {label}
                     </button>
                   ))}
                 </div>
