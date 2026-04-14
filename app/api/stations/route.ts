@@ -3,6 +3,7 @@ import { fetchAndParseStations } from '@/lib/parseStations';
 import { getCached, setCache } from '@/lib/cache';
 import { haversineDistance, detectBrand, DEPT_NAMES } from '@/lib/utils';
 import { Station, FUELS, resolvePrice } from '@/lib/types';
+import { fetchOsmStationNames } from '@/lib/overpass';
 
 export const dynamic = 'force-dynamic';
 
@@ -57,6 +58,28 @@ export async function GET(request: NextRequest) {
       .filter(Boolean);
     const min = values.length ? Math.min(...values) : 0;
     const max = values.length ? Math.max(...values) : 5;
+
+    // Enrich with OSM names (best-effort, don't fail if OSM is down)
+    try {
+      const osmCacheKey = `osm_${lat.toFixed(2)}_${lon.toFixed(2)}_${radius}`;
+      let osmStations = getCached<{ lat: number; lon: number; name: string }[]>(osmCacheKey);
+      if (!osmStations) {
+        osmStations = await fetchOsmStationNames(lat, lon, radius);
+        setCache(osmCacheKey, osmStations);
+      }
+      for (const station of nearby) {
+        if (station.brand && station.brand !== 'Indépendant') continue;
+        let bestName = '';
+        let bestDist = Infinity;
+        for (const osm of osmStations) {
+          const d = haversineDistance(station.lat, station.lon, osm.lat, osm.lon);
+          if (d < bestDist) { bestDist = d; bestName = osm.name; }
+        }
+        if (bestDist < 0.1 && bestName) station.brand = bestName;
+      }
+    } catch {
+      // OSM enrichment is best-effort
+    }
 
     return NextResponse.json({ stations: nearby, min, max, total: nearby.length });
   } catch (err) {

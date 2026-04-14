@@ -62,7 +62,7 @@ export default function Navigation({ selectedFuel, onFuelChange, onSearch, globa
               <Fuel className="w-4 h-4 text-white" />
             </div>
             <span className="font-black text-slate-900 text-base hidden sm:block">
-              Plein<span className="text-orange-500">Optimal</span>
+              Fais le <span className="text-orange-500">plein</span>
             </span>
           </button>
 

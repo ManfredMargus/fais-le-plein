@@ -9,7 +9,7 @@ interface Stat { brand?: string; name?: string; count: number; avg: number; code
 
 export default function BrandDashboard() {
   const [fuel, setFuel] = useState('SP95');
-  const [tab, setTab] = useState<'brands' | 'depts'>('brands');
+  const [tab, setTab] = useState<'brands' | 'departments'>('brands');
   const [data, setData] = useState<Stat[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -44,7 +44,7 @@ export default function BrandDashboard() {
           </div>
           <div className="flex flex-wrap gap-2">
             <div className="flex rounded-xl border border-slate-200 overflow-hidden">
-              {(['brands', 'depts'] as const).map((t) => (
+              {(['brands', 'departments'] as const).map((t) => (
                 <button key={t} onClick={() => setTab(t)}
                   className={`px-3 py-2 text-sm font-semibold transition-colors ${tab === t ? 'bg-slate-900 text-white' : 'text-slate-500 hover:bg-slate-50'}`}>
                   {t === 'brands' ? 'Enseignes' : 'Départements'}
