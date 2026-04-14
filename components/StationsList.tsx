@@ -124,7 +124,7 @@ export default function StationsList({ stations, selectedFuel, min, max }: Props
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-semibold text-slate-200 text-sm truncate">
-                        {station.address}
+                        {station.brand && station.brand !== 'Indépendant' ? station.brand : station.address}
                       </span>
                       {station.is24h && (
                         <span className="flex-shrink-0 flex items-center gap-0.5 text-[10px] text-blue-400 bg-blue-500/10 border border-blue-500/20 px-1.5 py-0.5 rounded">
@@ -136,13 +136,10 @@ export default function StationsList({ stations, selectedFuel, min, max }: Props
                     <div className="flex items-center gap-3 mt-0.5">
                       <span className="flex items-center gap-1 text-xs text-slate-500">
                         <MapPin className="w-3 h-3" />
-                        {station.city} {station.zipCode}
+                        {station.brand && station.brand !== 'Indépendant' ? station.address + ', ' : ''}{station.city} {station.zipCode}
                       </span>
                       {station.distance !== undefined && (
                         <span className="text-xs text-sky-400">{formatDistance(station.distance)}</span>
-                      )}
-                      {station.brand && station.brand !== 'Indépendant' && (
-                        <span className="text-xs text-slate-500">{station.brand}</span>
                       )}
                     </div>
                   </div>

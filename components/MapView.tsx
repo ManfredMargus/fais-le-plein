@@ -147,7 +147,10 @@ function PopupCard({ station, selectedFuel, min, max, rank }: {
         </div>
       )}
       <div style={{ fontWeight: 700, fontSize: '14px', color: '#0f172a', lineHeight: '1.3', marginBottom: '2px' }}>
-        {station.address}
+        {station.brand && station.brand !== 'Indépendant' ? station.brand : station.address}
+      </div>
+      <div style={{ color: '#64748b', fontSize: '12px', marginBottom: '2px' }}>
+        {station.brand && station.brand !== 'Indépendant' ? station.address : ''}
       </div>
       <div style={{ color: '#64748b', fontSize: '12px', marginBottom: '10px' }}>
         {station.city} {station.zipCode}
@@ -163,9 +166,6 @@ function PopupCard({ station, selectedFuel, min, max, rank }: {
             <span style={{ background: '#eff6ff', color: '#3b82f6', fontSize: '10px', fontWeight: 700, padding: '2px 6px', borderRadius: '6px', border: '1px solid #bfdbfe' }}>
               24h/24
             </span>
-          )}
-          {station.brand && station.brand !== 'Indépendant' && (
-            <span style={{ color: '#64748b', fontSize: '11px' }}>{station.brand}</span>
           )}
         </div>
       </div>
