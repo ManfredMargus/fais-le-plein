@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic';
 
 /** Get the API keys to search for a given fuel selector key */
 function getApiKeys(fuelKey: string): string[] {
-  return FUELS.find((f) => f.key === fuelKey)?.apiKeys as string[] ?? [fuelKey];
+  return [...(FUELS.find((f) => f.key === fuelKey)?.apiKeys ?? [fuelKey])];
 }
 
 /** Check if station has any of the given API fuel keys */
