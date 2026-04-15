@@ -1,7 +1,8 @@
-interface OsmStation {
+export interface OsmStation {
   lat: number;
   lon: number;
   name: string;
+  isFuel: boolean; // true = amenity=fuel, false = supermarket/hypermarket
 }
 
 export async function fetchOsmStationNames(
@@ -16,10 +17,12 @@ export async function fetchOsmStationNames(
   const west = (lon - delta / latCos).toFixed(6);
   const east = (lon + delta / latCos).toFixed(6);
 
-  const query = `[out:json][timeout:10];
+  const query = `[out:json][timeout:25];
 (
   node["amenity"="fuel"](${south},${west},${north},${east});
   way["amenity"="fuel"](${south},${west},${north},${east});
+  node["shop"~"supermarket|hypermarket"](${south},${west},${north},${east});
+  way["shop"~"supermarket|hypermarket"](${south},${west},${north},${east});
 );
 out center tags;`;
 
@@ -27,7 +30,7 @@ out center tags;`;
     method: 'POST',
     body: query,
     headers: { 'Content-Type': 'text/plain' },
-    signal: AbortSignal.timeout(12000),
+    signal: AbortSignal.timeout(28000),
   });
 
   if (!res.ok) return [];
@@ -40,7 +43,8 @@ out center tags;`;
       const elLon = el.type === 'node' ? (el.lon as number) : (el.center as Record<string, number>)?.lon;
       const tags = (el.tags ?? {}) as Record<string, string>;
       const name = tags.brand ?? tags.name ?? tags.operator ?? null;
-      return { lat: elLat, lon: elLon, name };
+      const isFuel = tags.amenity === 'fuel';
+      return { lat: elLat, lon: elLon, name, isFuel };
     })
     .filter((s: { lat: unknown; lon: unknown; name: unknown }) => s.lat && s.lon && s.name) as OsmStation[];
 }

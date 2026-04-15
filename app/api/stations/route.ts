@@ -3,7 +3,7 @@ import { fetchAndParseStations } from '@/lib/parseStations';
 import { getCached, setCache } from '@/lib/cache';
 import { haversineDistance, detectBrand, DEPT_NAMES } from '@/lib/utils';
 import { Station, FUELS, resolvePrice } from '@/lib/types';
-import { fetchOsmStationNames } from '@/lib/overpass';
+import { fetchOsmStationNames, OsmStation } from '@/lib/overpass';
 
 export const dynamic = 'force-dynamic';
 
@@ -62,21 +62,28 @@ export async function GET(request: NextRequest) {
     // Enrich with OSM names (best-effort, don't fail if OSM is down)
     try {
       const osmCacheKey = `osm_${lat.toFixed(2)}_${lon.toFixed(2)}_${radius}`;
-      let osmStations = getCached<{ lat: number; lon: number; name: string }[]>(osmCacheKey);
+      let osmStations = getCached<OsmStation[]>(osmCacheKey);
       if (!osmStations) {
         osmStations = await fetchOsmStationNames(lat, lon, radius);
         setCache(osmCacheKey, osmStations);
       }
       for (const station of nearby) {
         if (station.brand && station.brand !== 'Indépendant') continue;
+        // Priority 1: amenity=fuel nodes (up to 500m)
         let bestName = '';
         let bestDist = Infinity;
-        for (const osm of osmStations) {
+        for (const osm of osmStations.filter((o) => o.isFuel)) {
           const d = haversineDistance(station.lat, station.lon, osm.lat, osm.lon);
           if (d < bestDist) { bestDist = d; bestName = osm.name; }
         }
-        // 250m threshold — government coords and OSM coords can be offset by ~100-200m
-        if (bestDist < 0.25 && bestName) station.brand = bestName;
+        if (bestDist < 0.5 && bestName) { station.brand = bestName; continue; }
+        // Priority 2: supermarket/hypermarket (up to 300m) — covers Super U, Leclerc, etc.
+        bestDist = Infinity; bestName = '';
+        for (const osm of osmStations.filter((o) => !o.isFuel)) {
+          const d = haversineDistance(station.lat, station.lon, osm.lat, osm.lon);
+          if (d < bestDist) { bestDist = d; bestName = osm.name; }
+        }
+        if (bestDist < 0.3 && bestName) station.brand = bestName;
       }
     } catch {
       // OSM enrichment is best-effort
