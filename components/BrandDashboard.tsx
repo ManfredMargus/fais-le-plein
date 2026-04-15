@@ -2,16 +2,27 @@
 
 import { useState, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell, ResponsiveContainer } from 'recharts';
-import { Loader2, TrendingDown, TrendingUp } from 'lucide-react';
+import { Loader2, TrendingDown, TrendingUp, MapPin } from 'lucide-react';
 import { FUELS } from '@/lib/types';
 
 interface Stat { brand?: string; name?: string; count: number; avg: number; code?: string; }
+interface GlobalStats {
+  total: number;
+  fuelStats: Record<string, { min: number; max: number; avg: number; count: number }>;
+}
 
-export default function BrandDashboard() {
+interface Props {
+  globalStats: GlobalStats | null;
+}
+
+export default function BrandDashboard({ globalStats }: Props) {
   const [fuel, setFuel] = useState('SP95');
   const [tab, setTab] = useState<'brands' | 'departments'>('brands');
   const [data, setData] = useState<Stat[]>([]);
   const [loading, setLoading] = useState(false);
+  const [cheapestStation, setCheapestStation] = useState<{
+    address: string; city: string; brand: string | null; price: number;
+  } | null>(null);
 
   useEffect(() => {
     setLoading(true);
@@ -21,6 +32,35 @@ export default function BrandDashboard() {
       .catch(console.error)
       .finally(() => setLoading(false));
   }, [fuel, tab]);
+
+  // Fetch global cheapest station (France entière, rayon 1000km depuis le centre)
+  useEffect(() => {
+    fetch(`/api/stations?lat=46.6&lon=2.3&radius=1000&fuel=${fuel}&limit=1`)
+      .then((r) => r.json())
+      .then((d) => {
+        const s = d.stations?.[0];
+        if (s) {
+          const priceObj = Object.values(s.prices as Record<string, { value: number }>)
+            .find((_, i) => i === 0);
+          const fuelKeys = FUELS.find((f) => f.key === fuel)?.apiKeys ?? [fuel];
+          let price = 0;
+          for (const k of fuelKeys) {
+            if ((s.prices as Record<string, { value: number }>)[k]) {
+              price = (s.prices as Record<string, { value: number }>)[k].value;
+              break;
+            }
+          }
+          if (!price && priceObj) price = priceObj.value;
+          setCheapestStation({
+            address: s.address,
+            city: s.city,
+            brand: s.brand !== 'Indépendant' ? s.brand : null,
+            price,
+          });
+        }
+      })
+      .catch(console.error);
+  }, [fuel]);
 
   const min = data.length ? Math.min(...data.map((d) => d.avg)) : 0;
   const max = data.length ? Math.max(...data.map((d) => d.avg)) : 1;
@@ -34,9 +74,16 @@ export default function BrandDashboard() {
 
   const label = (d: Stat) => d.brand ?? d.name ?? '';
 
+  const currentFuel = FUELS.find((f) => f.key === fuel);
+  const globalMin = currentFuel
+    ? Math.min(...currentFuel.apiKeys.map((k) => globalStats?.fuelStats[k]?.min ?? Infinity).filter(isFinite))
+    : null;
+
   return (
     <section id="dashboard" className="bg-white border-t border-slate-100">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 py-14">
+
+        {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
           <div>
             <h2 className="text-2xl font-black text-slate-900">Qui est le moins cher ?</h2>
@@ -61,6 +108,40 @@ export default function BrandDashboard() {
             </div>
           </div>
         </div>
+
+        {/* ── Cheapest station in France ─────────────────────────────────── */}
+        {(cheapestStation || globalMin) && (
+          <div className="bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-2xl p-4 mb-6 flex flex-col sm:flex-row sm:items-center gap-3">
+            <div className="w-10 h-10 bg-green-500 rounded-xl flex items-center justify-center flex-shrink-0">
+              <MapPin className="w-5 h-5 text-white" />
+            </div>
+            <div className="flex-1">
+              <div className="text-xs font-bold text-green-600 uppercase tracking-wide mb-0.5">
+                Station la moins chère en France 🇫🇷
+              </div>
+              {cheapestStation ? (
+                <div className="font-bold text-slate-800">
+                  {cheapestStation.brand ?? cheapestStation.address}
+                  {cheapestStation.brand && (
+                    <span className="font-normal text-slate-500"> · {cheapestStation.address}</span>
+                  )}
+                  <span className="text-slate-400 font-normal"> — {cheapestStation.city}</span>
+                </div>
+              ) : (
+                <div className="font-bold text-slate-800">Calcul en cours…</div>
+              )}
+              <div className="text-xs text-slate-400 mt-0.5">{currentFuel?.label}</div>
+            </div>
+            <div className="text-3xl font-black text-green-600 flex-shrink-0">
+              {cheapestStation?.price
+                ? `${cheapestStation.price.toFixed(3)}€`
+                : globalMin
+                  ? `${globalMin.toFixed(3)}€`
+                  : '—'
+              }
+            </div>
+          </div>
+        )}
 
         {/* Winner / Loser cards */}
         {!loading && data.length >= 2 && (

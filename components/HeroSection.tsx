@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Search, MapPin, Loader2, TrendingDown, Zap, Shield, ChevronRight, Flame } from 'lucide-react';
+import { Search, MapPin, Loader2, TrendingDown, Zap, Shield, ChevronRight, Flame, Car } from 'lucide-react';
 import { FUELS } from '@/lib/types';
 
 interface Props {
@@ -42,7 +42,8 @@ export default function HeroSection({ globalStats, totalStations, selectedFuel, 
   const [address, setAddress] = useState('');
   const [searching, setSearching] = useState(false);
   const [geoLoading, setGeoLoading] = useState(false);
-  const [liters, setLiters] = useState(50);
+  const [plate, setPlate] = useState('');
+  const [plateLoading, setPlateLoading] = useState(false);
 
   const currentFuel = FUELS.find((f) => f.key === selectedFuel);
 
@@ -60,7 +61,21 @@ export default function HeroSection({ globalStats, totalStations, selectedFuel, 
   const maxPrice = getStatFor('max');
   const count = getStatFor('count');
 
-  const savings = avg && minPrice ? ((avg - minPrice) * liters).toFixed(2) : null;
+  const handlePlate = async () => {
+    const cleaned = plate.replace(/[\s-]/g, '').toUpperCase();
+    if (!cleaned) return;
+    setPlateLoading(true);
+    try {
+      const res = await fetch(`/api/plaque?immat=${encodeURIComponent(cleaned)}`);
+      const data = await res.json();
+      if (data.fuel) onFuelChange(data.fuel);
+      if (data.label) alert(`${data.label} → ${data.fuelLabel ?? data.fuel} sélectionné`);
+    } catch {
+      alert('Impossible de récupérer les infos du véhicule.');
+    } finally {
+      setPlateLoading(false);
+    }
+  };
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -115,8 +130,8 @@ export default function HeroSection({ globalStats, totalStations, selectedFuel, 
 
       {/* ── Main search card ─────────────────────────────────────────────── */}
       <div className="w-full max-w-2xl">
-        {/* Fuel selector — single scrollable row */}
-        <div className="flex gap-2 overflow-x-auto pb-1 mb-4 scrollbar-hide justify-center flex-nowrap">
+        {/* Fuel selector — 2-3 per row grid, stays compact */}
+        <div className="grid grid-cols-3 sm:grid-cols-5 gap-2 mb-4">
           {FUELS.map((fuel) => {
             const fuelAvg = (() => {
               if (!globalStats) return null;
@@ -125,20 +140,21 @@ export default function HeroSection({ globalStats, totalStations, selectedFuel, 
               }
               return null;
             })();
+            const isSelected = selectedFuel === fuel.key;
             return (
               <button
                 key={fuel.key}
                 onClick={() => onFuelChange(fuel.key)}
-                className={`flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-sm font-bold transition-all whitespace-nowrap flex-shrink-0 ${
-                  selectedFuel === fuel.key
-                    ? 'bg-orange-500 text-white shadow-lg shadow-orange-200 scale-105'
-                    : 'bg-white text-slate-500 hover:text-slate-800 border border-slate-200 hover:border-orange-300 hover:shadow-sm'
+                className={`flex flex-col items-center gap-0.5 px-2 py-2.5 rounded-xl text-xs font-bold transition-all ${
+                  isSelected
+                    ? 'bg-orange-500 text-white shadow-md shadow-orange-200'
+                    : 'bg-white text-slate-500 hover:text-slate-800 border border-slate-200 hover:border-orange-300'
                 }`}
               >
-                <span>{fuel.emoji}</span>
-                <span>{fuel.label}</span>
+                <span className="text-base">{fuel.emoji}</span>
+                <span className="leading-tight text-center">{fuel.label}</span>
                 {fuelAvg && (
-                  <span className={`text-xs font-semibold ${selectedFuel === fuel.key ? 'text-orange-100' : 'text-slate-400'}`}>
+                  <span className={`text-[10px] font-semibold ${isSelected ? 'text-orange-100' : 'text-slate-400'}`}>
                     {fuelAvg.toFixed(3)}€
                   </span>
                 )}
@@ -172,6 +188,27 @@ export default function HeroSection({ globalStats, totalStations, selectedFuel, 
             <span className="hidden sm:inline">Chercher</span>
           </button>
         </form>
+
+        {/* Plate lookup */}
+        <div className="mt-3 flex items-center gap-2 bg-blue-50 border border-blue-100 rounded-xl px-3 py-2.5">
+          <Car className="w-4 h-4 text-blue-400 flex-shrink-0" />
+          <input
+            type="text"
+            value={plate}
+            onChange={(e) => setPlate(e.target.value.toUpperCase())}
+            onKeyDown={(e) => e.key === 'Enter' && handlePlate()}
+            placeholder="Ma plaque : AB-123-CD"
+            maxLength={9}
+            className="flex-1 bg-transparent text-sm font-mono font-bold text-slate-700 placeholder-slate-400 focus:outline-none uppercase tracking-widest"
+          />
+          <button
+            onClick={handlePlate}
+            disabled={!plate.trim() || plateLoading}
+            className="px-3 py-1 bg-blue-500 text-white text-xs font-bold rounded-lg hover:bg-blue-400 disabled:opacity-40 transition-colors flex-shrink-0"
+          >
+            {plateLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Quel carburant ?'}
+          </button>
+        </div>
 
         {/* Geolocation + quick cities */}
         <div className="flex flex-col items-center gap-3 mt-4">
@@ -245,34 +282,6 @@ export default function HeroSection({ globalStats, totalStations, selectedFuel, 
         </div>
       )}
 
-      {/* ── Savings calculator ───────────────────────────────────────────── */}
-      {savings && avg && minPrice && (
-        <div className="mt-6 w-full max-w-2xl bg-gradient-to-r from-orange-50 to-amber-50 border border-orange-100 rounded-2xl p-5 shadow-sm">
-          <div className="flex items-center gap-2 mb-3">
-            <Zap className="w-4 h-4 text-orange-500" />
-            <span className="text-sm font-bold text-slate-700">Calculateur d&apos;économies</span>
-          </div>
-          <div className="flex items-center gap-4 flex-wrap">
-            <div className="flex items-center gap-2 flex-1">
-              <span className="text-xs text-slate-500 whitespace-nowrap">Litres par plein :</span>
-              <input
-                type="range"
-                min={20}
-                max={100}
-                step={5}
-                value={liters}
-                onChange={(e) => setLiters(Number(e.target.value))}
-                className="flex-1 accent-orange-500"
-              />
-              <span className="text-sm font-bold text-slate-700 w-10 text-right">{liters}L</span>
-            </div>
-            <div className="text-right">
-              <div className="text-2xl font-black text-orange-500">{savings}€</div>
-              <div className="text-xs text-slate-400">d&apos;économie possible vs prix moyen</div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* ── Feature bullets ─────────────────────────────────────────────── */}
       <div className="mt-10 flex flex-wrap justify-center gap-4 text-sm text-slate-400">

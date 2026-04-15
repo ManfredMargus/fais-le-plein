@@ -434,8 +434,9 @@ export default function ResultsView({
             const isCompromis = station.id === compromisId && i > 0;
             const isFav = favorites.has(station.id);
             const brandName = station.brand && station.brand !== 'Indépendant' ? station.brand : null;
-            const displayName = brandName ?? station.address;
-            const displaySub = brandName ? station.address : station.city;
+            // Title = brand (if known) else address. Sub = address only when brand is the title.
+            const displayTitle = brandName ?? station.address;
+            const displayAddress = brandName ? station.address : null;
 
             return (
               <div
@@ -488,7 +489,7 @@ export default function ResultsView({
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1.5 flex-wrap">
                         <span className="text-sm font-bold text-slate-800 truncate max-w-[160px]">
-                          {displayName}
+                          {displayTitle}
                         </span>
                         {station.is24h && (
                           <span className="flex items-center gap-0.5 text-[10px] font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100 flex-shrink-0">
@@ -496,9 +497,11 @@ export default function ResultsView({
                           </span>
                         )}
                       </div>
-                      <div className="text-xs text-slate-400 mt-0.5 truncate">{displaySub}</div>
+                      {displayAddress && (
+                        <div className="text-xs text-slate-400 mt-0.5 truncate">{displayAddress}</div>
+                      )}
                       <div className="flex items-center gap-2 mt-0.5 text-xs flex-wrap">
-                        <span className="text-slate-400">{station.city}</span>
+                        <span className="text-slate-500 font-medium">{station.city}</span>
                         {station.distance !== undefined && (
                           <span className="text-orange-400 font-semibold">{formatDistance(station.distance)}</span>
                         )}

@@ -5,7 +5,7 @@ import Navigation from '@/components/Navigation';
 import HeroSection from '@/components/HeroSection';
 import ResultsView from '@/components/ResultsView';
 import BrandDashboard from '@/components/BrandDashboard';
-import { Station, resolvePrice } from '@/lib/types';
+import { Station } from '@/lib/types';
 import { ExternalLink, Heart } from 'lucide-react';
 
 interface GlobalStats {
@@ -64,6 +64,37 @@ export default function Home() {
     if (center) fetchStations(center.lat, center.lon, selectedFuel, r);
   }, [center, selectedFuel, fetchStations]);
 
+  // Active station count = stations with at least one price (use most common fuel)
+  const activeCount = globalStats
+    ? Math.max(...Object.values(globalStats.fuelStats).map((f) => f.count))
+    : 0;
+
+  if (hasSearched) {
+    return (
+      <div className="h-screen flex flex-col overflow-hidden bg-white">
+        <Navigation
+          selectedFuel={selectedFuel}
+          onFuelChange={handleFuelChange}
+          onSearch={handleSearch}
+          globalStats={globalStats?.fuelStats ?? null}
+          compact={true}
+        />
+        <div className="flex-1 overflow-hidden mt-14">
+          <ResultsView
+            stations={stations}
+            center={center}
+            radius={radius}
+            onRadiusChange={handleRadiusChange}
+            selectedFuel={selectedFuel}
+            loading={loading}
+            min={min}
+            max={max}
+          />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#f8fafc]">
       <Navigation
@@ -71,36 +102,20 @@ export default function Home() {
         onFuelChange={handleFuelChange}
         onSearch={handleSearch}
         globalStats={globalStats?.fuelStats ?? null}
-        compact={hasSearched}
+        compact={false}
       />
-
-      {!hasSearched ? (
-        <HeroSection
-          globalStats={globalStats?.fuelStats ?? null}
-          totalStations={globalStats?.total ?? 11000}
-          selectedFuel={selectedFuel}
-          onFuelChange={setSelectedFuel}
-          onSearch={handleSearch}
-        />
-      ) : (
-        <ResultsView
-          stations={stations}
-          center={center}
-          radius={radius}
-          onRadiusChange={handleRadiusChange}
-          selectedFuel={selectedFuel}
-          loading={loading}
-          min={min}
-          max={max}
-        />
-      )}
-
-      <BrandDashboard />
-
+      <HeroSection
+        globalStats={globalStats?.fuelStats ?? null}
+        totalStations={activeCount}
+        selectedFuel={selectedFuel}
+        onFuelChange={setSelectedFuel}
+        onSearch={handleSearch}
+      />
+      <BrandDashboard globalStats={globalStats} />
       <footer className="bg-white border-t border-slate-100 py-8">
         <div className="max-w-5xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-slate-400">
           <div className="flex items-center gap-2">
-            <span className="font-bold text-slate-700">PleinOptimal</span>
+            <span className="font-bold text-slate-700">Fais le plein</span>
             <span>·</span>
             <span>Données actualisées toutes les 10 min</span>
           </div>
