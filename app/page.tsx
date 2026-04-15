@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import Navigation from '@/components/Navigation';
 import HeroSection from '@/components/HeroSection';
 import ResultsView from '@/components/ResultsView';
@@ -23,6 +23,7 @@ export default function Home() {
   const [min, setMin] = useState(0);
   const [max, setMax] = useState(5);
   const [hasSearched, setHasSearched] = useState(false);
+  const osmAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     fetch('/api/stations?mode=stats')
@@ -32,18 +33,31 @@ export default function Home() {
   }, []);
 
   const fetchStations = useCallback(async (lat: number, lon: number, fuel: string, r?: number) => {
+    // Cancel any pending background OSM enrichment from a previous search
+    osmAbortRef.current?.abort();
+
     const searchRadius = r ?? radius;
+    const base = `/api/stations?lat=${lat}&lon=${lon}&radius=${searchRadius}&fuel=${fuel}&limit=100`;
     setLoading(true);
     try {
-      const res = await fetch(`/api/stations?lat=${lat}&lon=${lon}&radius=${searchRadius}&fuel=${fuel}&limit=100`);
+      // Phase 1 — fast: return stations without OSM enrichment, map appears immediately
+      const res = await fetch(`${base}&skipOsm=1`);
       const data = await res.json();
       if (data.error) throw new Error(data.error);
       setStations(data.stations ?? []);
       setMin(data.min ?? 0);
       setMax(data.max ?? 5);
+      setLoading(false);
+
+      // Phase 2 — background: enrich brand names via OSM, update silently
+      const ctrl = new AbortController();
+      osmAbortRef.current = ctrl;
+      fetch(base, { signal: ctrl.signal })
+        .then((r) => r.json())
+        .then((d) => { if (d.stations) setStations(d.stations); })
+        .catch(() => {}); // aborted or OSM timeout → keep phase-1 data
     } catch (e) {
       console.error(e);
-    } finally {
       setLoading(false);
     }
   }, [radius]);

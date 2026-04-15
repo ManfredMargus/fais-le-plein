@@ -25,6 +25,7 @@ export async function GET(request: NextRequest) {
   const fuelKey = params.get('fuel') ?? 'SP95';
   const limit = Math.min(parseInt(params.get('limit') ?? '100'), 200);
   const mode = params.get('mode') ?? 'nearby';
+  const skipOsm = params.get('skipOsm') === '1';
 
   try {
     let stations = getCached<Station[]>('all_stations');
@@ -59,8 +60,8 @@ export async function GET(request: NextRequest) {
     const min = values.length ? Math.min(...values) : 0;
     const max = values.length ? Math.max(...values) : 5;
 
-    // Enrich with OSM names (best-effort, don't fail if OSM is down)
-    try {
+    // Enrich with OSM names (best-effort, skipped on phase-1 fast call)
+    if (!skipOsm) try {
       const osmCacheKey = `osm_${lat.toFixed(2)}_${lon.toFixed(2)}_${radius}`;
       let osmStations = getCached<OsmStation[]>(osmCacheKey);
       if (!osmStations) {
@@ -85,9 +86,7 @@ export async function GET(request: NextRequest) {
         }
         if (bestDist < 0.3 && bestName) station.brand = bestName;
       }
-    } catch {
-      // OSM enrichment is best-effort
-    }
+    } catch {} // OSM enrichment is best-effort
 
     return NextResponse.json({ stations: nearby, min, max, total: nearby.length });
   } catch (err) {
