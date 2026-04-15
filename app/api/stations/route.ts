@@ -75,7 +75,8 @@ export async function GET(request: NextRequest) {
           const d = haversineDistance(station.lat, station.lon, osm.lat, osm.lon);
           if (d < bestDist) { bestDist = d; bestName = osm.name; }
         }
-        if (bestDist < 0.1 && bestName) station.brand = bestName;
+        // 250m threshold — government coords and OSM coords can be offset by ~100-200m
+        if (bestDist < 0.25 && bestName) station.brand = bestName;
       }
     } catch {
       // OSM enrichment is best-effort

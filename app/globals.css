@@ -73,6 +73,10 @@ body {
   color: #f97316 !important;
 }
 
+/* ─── Scrollbar hide utility ───────────────────────── */
+.scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+
 .leaflet-attribution-flag { display: none !important; }
 .leaflet-control-attribution {
   font-size: 9px !important;

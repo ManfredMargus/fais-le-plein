@@ -115,8 +115,8 @@ export default function HeroSection({ globalStats, totalStations, selectedFuel, 
 
       {/* ── Main search card ─────────────────────────────────────────────── */}
       <div className="w-full max-w-2xl">
-        {/* Fuel selector */}
-        <div className="flex gap-2 flex-wrap justify-center mb-4">
+        {/* Fuel selector — single scrollable row */}
+        <div className="flex gap-2 overflow-x-auto pb-1 mb-4 scrollbar-hide justify-center flex-nowrap">
           {FUELS.map((fuel) => {
             const fuelAvg = (() => {
               if (!globalStats) return null;
@@ -129,14 +129,14 @@ export default function HeroSection({ globalStats, totalStations, selectedFuel, 
               <button
                 key={fuel.key}
                 onClick={() => onFuelChange(fuel.key)}
-                className={`flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-sm font-bold transition-all ${
+                className={`flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl text-sm font-bold transition-all whitespace-nowrap flex-shrink-0 ${
                   selectedFuel === fuel.key
                     ? 'bg-orange-500 text-white shadow-lg shadow-orange-200 scale-105'
                     : 'bg-white text-slate-500 hover:text-slate-800 border border-slate-200 hover:border-orange-300 hover:shadow-sm'
                 }`}
               >
                 <span>{fuel.emoji}</span>
-                {fuel.label}
+                <span>{fuel.label}</span>
                 {fuelAvg && (
                   <span className={`text-xs font-semibold ${selectedFuel === fuel.key ? 'text-orange-100' : 'text-slate-400'}`}>
                     {fuelAvg.toFixed(3)}€

@@ -2,7 +2,7 @@
 
 import dynamic from 'next/dynamic';
 import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
-import { Loader2, MapPin, Zap, Navigation, ExternalLink } from 'lucide-react';
+import { Loader2, MapPin, Zap, Navigation, ExternalLink, Heart, Share2 } from 'lucide-react';
 import { Station, FUELS, resolvePrice } from '@/lib/types';
 import { formatDistance, formatDate, getPriceLevel } from '@/lib/utils';
 
@@ -126,11 +126,42 @@ function computeCompromisId(
 export default function ResultsView({
   stations, center, radius, onRadiusChange, selectedFuel, loading, min, max,
 }: Props) {
-  const [sortBy, setSortBy] = useState<'price' | 'distance'>('price');
+  const [sortBy, setSortBy] = useState<'price' | 'distance' | 'favorites'>('price');
   const [activeStation, setActiveStation] = useState<string | null>(null);
   const [selectedServices, setSelectedServices] = useState<Set<string>>(new Set());
   const [showItinMenu, setShowItinMenu] = useState<string | null>(null);
   const [mapClickId, setMapClickId] = useState<string | null>(null);
+  const [favorites, setFavorites] = useState<Set<string>>(new Set());
+
+  // Load favorites from localStorage
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('flp_favorites');
+      if (saved) setFavorites(new Set(JSON.parse(saved)));
+    } catch { /* ignore */ }
+  }, []);
+
+  const toggleFavorite = useCallback((id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setFavorites((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      try { localStorage.setItem('flp_favorites', JSON.stringify([...next])); } catch { /* ignore */ }
+      return next;
+    });
+  }, []);
+
+  const shareStation = useCallback((station: Station, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const name = station.brand && station.brand !== 'Indépendant' ? station.brand : station.address;
+    const text = `${name} — ${station.city} : vérifier le prix sur Fais le plein`;
+    const url = `https://faisleplein.vercel.app/?lat=${station.lat}&lon=${station.lon}`;
+    if (navigator.share) {
+      navigator.share({ title: name, text, url }).catch(() => {});
+    } else {
+      navigator.clipboard.writeText(`${text}\n${url}`).then(() => alert('Lien copié !'));
+    }
+  }, []);
 
   const listRef = useRef<HTMLDivElement>(null);
   const cardRefs = useRef<Map<string, HTMLElement>>(new Map());
@@ -186,13 +217,16 @@ export default function ResultsView({
       if (selectedServices.size === 0) return true;
       return [...selectedServices].every((svc) => s.services.includes(svc));
     });
+    if (sortBy === 'favorites') {
+      list = list.filter((s) => favorites.has(s.id));
+    }
     return list.sort((a, b) => {
-      if (sortBy === 'price')
+      if (sortBy === 'price' || sortBy === 'favorites')
         return (resolvePrice(a.prices, selectedFuel)?.value ?? Infinity) -
                (resolvePrice(b.prices, selectedFuel)?.value ?? Infinity);
       return (a.distance ?? Infinity) - (b.distance ?? Infinity);
     });
-  }, [stations, selectedServices, sortBy, selectedFuel]);
+  }, [stations, selectedServices, sortBy, selectedFuel, favorites]);
 
   const compromisId = useMemo(
     () => computeCompromisId(displayed, selectedFuel, min, max),
@@ -297,15 +331,16 @@ export default function ResultsView({
             )}
           </div>
           <div className="flex rounded-lg border border-slate-200 overflow-hidden text-xs">
-            {(['price', 'distance'] as const).map((s) => (
+            {([['price', 'Prix ↑'], ['distance', 'Distance'], ['favorites', '❤️']] as const).map(([s, label]) => (
               <button
                 key={s}
                 onClick={() => setSortBy(s)}
                 className={`px-3 py-1.5 font-semibold transition-colors ${
                   sortBy === s ? 'bg-orange-500 text-white' : 'text-slate-500 hover:bg-slate-50'
                 }`}
+                title={s === 'favorites' ? 'Mes favoris' : undefined}
               >
-                {s === 'price' ? 'Prix ↑' : 'Distance'}
+                {label}
               </button>
             ))}
           </div>
@@ -372,7 +407,7 @@ export default function ResultsView({
               <p className="text-xs mt-1">Augmentez le rayon de recherche</p>
             </div>
           )}
-          {!loading && stations.length > 0 && displayed.length === 0 && (
+          {!loading && stations.length > 0 && displayed.length === 0 && sortBy !== 'favorites' && (
             <div className="flex flex-col items-center justify-center h-full text-slate-400 text-center px-6">
               <p className="text-sm font-medium">Aucune station avec ces services</p>
               <button
@@ -383,6 +418,13 @@ export default function ResultsView({
               </button>
             </div>
           )}
+          {sortBy === 'favorites' && displayed.length === 0 && (
+            <div className="flex flex-col items-center justify-center h-full text-slate-400 text-center px-6">
+              <Heart className="w-8 h-8 mb-3 text-slate-200" />
+              <p className="text-sm font-medium">Aucun favori dans cette zone</p>
+              <p className="text-xs mt-1">Cliquez sur ❤️ pour ajouter des stations</p>
+            </div>
+          )}
 
           {displayed.map((station, i) => {
             const priceObj = resolvePrice(station.prices, selectedFuel);
@@ -390,6 +432,7 @@ export default function ResultsView({
             const level = getPriceLevel(priceObj.value, min, max);
             const isActive = activeStation === station.id;
             const isCompromis = station.id === compromisId && i > 0;
+            const isFav = favorites.has(station.id);
             const brandName = station.brand && station.brand !== 'Indépendant' ? station.brand : null;
             const displayName = brandName ?? station.address;
             const displaySub = brandName ? station.address : station.city;
@@ -405,8 +448,8 @@ export default function ResultsView({
                   isActive ? 'bg-orange-50' : 'hover:bg-slate-50/70'
                 }`}
               >
-                {/* Badges row */}
-                {(i === 0 || isCompromis) && (
+                        {/* Badges row */}
+                {(i === 0 || isCompromis || isFav) && (
                   <div className="px-4 pt-2.5 flex gap-1.5">
                     {i === 0 && (
                       <span className="text-[10px] font-bold text-green-700 bg-green-50 border border-green-200 px-2 py-0.5 rounded-full">
@@ -416,6 +459,11 @@ export default function ResultsView({
                     {isCompromis && (
                       <span className="text-[10px] font-bold text-violet-700 bg-violet-50 border border-violet-200 px-2 py-0.5 rounded-full">
                         Meilleur compromis
+                      </span>
+                    )}
+                    {isFav && (
+                      <span className="text-[10px] font-bold text-rose-600 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-full">
+                        ❤️ Favori
                       </span>
                     )}
                   </div>
@@ -473,10 +521,19 @@ export default function ResultsView({
                       <div className="text-[10px] text-slate-300 mt-0.5">{formatDate(priceObj.updatedAt)}</div>
                     </div>
 
-                    {/* Price */}
-                    <div className={`flex-shrink-0 px-3 py-2 rounded-xl border text-center min-w-[68px] ${PRICE_STYLES[level]}`}>
-                      <div className="text-lg font-black leading-tight">{priceObj.value.toFixed(3)}</div>
-                      <div className="text-[10px] font-medium opacity-60">€/L</div>
+                    {/* Price + fav */}
+                    <div className="flex flex-col items-end gap-1.5 flex-shrink-0">
+                      <div className={`px-3 py-2 rounded-xl border text-center min-w-[68px] ${PRICE_STYLES[level]}`}>
+                        <div className="text-lg font-black leading-tight">{priceObj.value.toFixed(3)}</div>
+                        <div className="text-[10px] font-medium opacity-60">€/L</div>
+                      </div>
+                      <button
+                        onClick={(e) => toggleFavorite(station.id, e)}
+                        className="p-1 rounded-lg hover:bg-slate-100 transition-colors"
+                        title={isFav ? 'Retirer des favoris' : 'Ajouter aux favoris'}
+                      >
+                        <Heart className={`w-4 h-4 transition-colors ${isFav ? 'fill-rose-500 text-rose-500' : 'text-slate-300 hover:text-rose-400'}`} />
+                      </button>
                     </div>
                   </div>
                 </button>
@@ -508,7 +565,7 @@ export default function ResultsView({
                       </div>
                     )}
 
-                    {/* Itinerary buttons */}
+                    {/* Itinerary + actions */}
                     <div className="flex gap-2 flex-wrap">
                       <button
                         onClick={(e) => { e.stopPropagation(); openItinerary(station, 'gmaps'); }}
@@ -530,6 +587,22 @@ export default function ResultsView({
                       >
                         <Navigation className="w-3 h-3" />
                         Plans (iOS)
+                      </button>
+                      <button
+                        onClick={(e) => toggleFavorite(station.id, e)}
+                        className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold transition-colors ${
+                          isFav ? 'bg-rose-100 text-rose-600 hover:bg-rose-200' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                        }`}
+                      >
+                        <Heart className={`w-3.5 h-3.5 ${isFav ? 'fill-rose-500' : ''}`} />
+                        {isFav ? 'Retiré des favoris' : 'Ajouter aux favoris'}
+                      </button>
+                      <button
+                        onClick={(e) => shareStation(station, e)}
+                        className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 text-slate-500 rounded-xl text-xs font-bold hover:bg-slate-200 transition-colors"
+                      >
+                        <Share2 className="w-3.5 h-3.5" />
+                        Partager
                       </button>
                     </div>
                   </div>
