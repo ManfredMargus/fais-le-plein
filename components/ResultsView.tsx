@@ -1,8 +1,8 @@
 'use client';
 
 import dynamic from 'next/dynamic';
-import { useState, useMemo } from 'react';
-import { Loader2, MapPin, Zap } from 'lucide-react';
+import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import { Loader2, MapPin, Zap, Navigation, ExternalLink } from 'lucide-react';
 import { Station, FUELS, resolvePrice } from '@/lib/types';
 import { formatDistance, formatDate, getPriceLevel } from '@/lib/utils';
 
@@ -17,29 +17,52 @@ const MapView = dynamic(() => import('./MapView'), {
 
 // ── Service icon mapping ──────────────────────────────────────────────────────
 const SERVICE_ICONS: Record<string, { icon: string; label: string }> = {
+  // Gonflage
   'Gonflage pneus':           { icon: '🔵', label: 'Gonfleur' },
   'Station de gonflage':      { icon: '🔵', label: 'Gonfleur' },
+  // Lavage
   'Lavage automatique':       { icon: '🚗', label: 'Lavage auto' },
   'Lavage manuel':            { icon: '🪣', label: 'Lavage manuel' },
   'Station de lavage':        { icon: '🚗', label: 'Lavage' },
   'Lavage':                   { icon: '🚗', label: 'Lavage' },
+  'Laverie':                  { icon: '👕', label: 'Laverie' },
+  // Recharge
   'Bornes électriques':       { icon: '⚡', label: 'Recharge EV' },
   'Station de recharge':      { icon: '⚡', label: 'Recharge EV' },
+  // DAB
   'DAB (Distributeur automatique de billets)': { icon: '🏧', label: 'DAB' },
   'Distributeur automatique de billets':       { icon: '🏧', label: 'DAB' },
+  'DAB':                      { icon: '🏧', label: 'DAB' },
+  // Boutique / restauration
   'Boutique alimentaire':     { icon: '🛒', label: 'Boutique' },
   'Boutique non alimentaire': { icon: '🛍️', label: 'Boutique' },
   'Restauration sur place':   { icon: '☕', label: 'Restauration' },
+  'Restauration':             { icon: '☕', label: 'Restauration' },
+  'Restauration à emporter':  { icon: '🥤', label: 'À emporter' },
   'Bar':                      { icon: '☕', label: 'Bar' },
+  'Relais colis':             { icon: '📦', label: 'Relais colis' },
+  // Services
   'Wifi':                     { icon: '📶', label: 'Wi-Fi' },
+  'Wi-Fi':                    { icon: '📶', label: 'Wi-Fi' },
   'WC publics':               { icon: '🚻', label: 'Toilettes' },
+  'Toilettes publiques':      { icon: '🚻', label: 'Toilettes' },
+  'Douches':                  { icon: '🚿', label: 'Douches' },
+  'Espace bébé':              { icon: '👶', label: 'Espace bébé' },
+  'Location de véhicule':     { icon: '🚗', label: 'Location véhicule' },
+  'Services réparation / entretien': { icon: '🔧', label: 'Réparation' },
+  // Carburant
   'Carburant additivé':       { icon: '✨', label: 'Carb. additivé' },
+  'Vente d\'additifs carburants': { icon: '✨', label: 'Additifs' },
   'Vente de fioul domestique': { icon: '🏠', label: 'Fioul' },
   'Vente de gaz domestique':  { icon: '🔵', label: 'Gaz' },
+  'Vente de gaz domestique (Butane, Propane)': { icon: '🔵', label: 'Gaz' },
+  'Vente de pétrole lampant': { icon: '🕯️', label: 'Pétrole lampant' },
+  // Paiement
   'Cartes bancaires':         { icon: '💳', label: 'CB acceptée' },
   'Automate CB 24h/24':       { icon: '💳', label: 'CB 24h/24' },
+  'Automate CB 24/24':        { icon: '💳', label: 'CB 24h/24' },
+  // Poids lourds
   'Piste poids lourds':       { icon: '🚛', label: 'Poids lourds' },
-  'Vente de pétrole lampant': { icon: '🕯️', label: 'Pétrole lampant' },
 };
 
 const PRICE_STYLES = {
@@ -61,12 +84,79 @@ interface Props {
   max: number;
 }
 
+/** Open navigation in the best available maps app */
+function openItinerary(station: Station, mode: 'gmaps' | 'waze' | 'apple' = 'gmaps') {
+  const { lat, lon } = station;
+  const label = encodeURIComponent(
+    station.brand && station.brand !== 'Indépendant' ? station.brand : station.address
+  );
+  let url = '';
+  if (mode === 'waze') {
+    url = `https://waze.com/ul?ll=${lat},${lon}&navigate=yes`;
+  } else if (mode === 'apple') {
+    url = `maps://maps.apple.com/?daddr=${lat},${lon}&q=${label}`;
+  } else {
+    url = `https://www.google.com/maps/dir/?api=1&destination=${lat},${lon}&destination_place_id=${label}`;
+  }
+  window.open(url, '_blank', 'noopener,noreferrer');
+}
+
+/** Score for "meilleur compromis": low price + reasonable proximity */
+function computeCompromisId(
+  stations: { id: string; distance?: number; prices: Station['prices'] }[],
+  fuel: string,
+  min: number,
+  max: number,
+): string | null {
+  if (stations.length < 2) return null;
+  const maxDist = Math.max(...stations.map((s) => s.distance ?? 0));
+  let bestId: string | null = null;
+  let bestScore = Infinity;
+  for (const s of stations) {
+    const price = resolvePrice(s.prices, fuel)?.value;
+    if (!price) continue;
+    const priceRatio = (price - min) / (max - min + 0.001);
+    const distRatio = (s.distance ?? 0) / (maxDist + 0.001);
+    const score = priceRatio * 0.65 + distRatio * 0.35;
+    if (score < bestScore) { bestScore = score; bestId = s.id; }
+  }
+  return bestId;
+}
+
 export default function ResultsView({
   stations, center, radius, onRadiusChange, selectedFuel, loading, min, max,
 }: Props) {
   const [sortBy, setSortBy] = useState<'price' | 'distance'>('price');
   const [activeStation, setActiveStation] = useState<string | null>(null);
   const [selectedServices, setSelectedServices] = useState<Set<string>>(new Set());
+  const [showItinMenu, setShowItinMenu] = useState<string | null>(null);
+  const [mapClickId, setMapClickId] = useState<string | null>(null);
+
+  const listRef = useRef<HTMLDivElement>(null);
+  const cardRefs = useRef<Map<string, HTMLElement>>(new Map());
+
+  // ── When map marker is clicked → scroll list to that card ────────────────
+  const handleMapClick = useCallback((id: string) => {
+    setActiveStation(id);
+    setMapClickId(id);
+  }, []);
+
+  useEffect(() => {
+    if (!mapClickId) return;
+    const el = cardRefs.current.get(mapClickId);
+    if (el && listRef.current) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+    setMapClickId(null);
+  }, [mapClickId]);
+
+  // Close itinerary menu when clicking outside
+  useEffect(() => {
+    if (!showItinMenu) return;
+    const handler = () => setShowItinMenu(null);
+    document.addEventListener('click', handler);
+    return () => document.removeEventListener('click', handler);
+  }, [showItinMenu]);
 
   // ── Collect all services present in current results ───────────────────────
   const availableServices = useMemo(() => {
@@ -104,6 +194,11 @@ export default function ResultsView({
     });
   }, [stations, selectedServices, sortBy, selectedFuel]);
 
+  const compromisId = useMemo(
+    () => computeCompromisId(displayed, selectedFuel, min, max),
+    [displayed, selectedFuel, min, max],
+  );
+
   const currentFuel = FUELS.find((f) => f.key === selectedFuel);
   const savings = max > 0 && min > 0 ? ((max - min) * 50).toFixed(2) : null;
 
@@ -111,7 +206,7 @@ export default function ResultsView({
     <section id="map" className="flex flex-col lg:flex-row h-[calc(100vh-56px)] mt-14 bg-white">
 
       {/* ── Map ──────────────────────────────────────────────────────────── */}
-      <div className="relative flex-1 h-[42vh] lg:h-full order-2 lg:order-1">
+      <div className="relative flex-1 h-[45vh] lg:h-full order-2 lg:order-1">
         {loading && (
           <div className="absolute inset-0 bg-white/70 backdrop-blur-sm flex items-center justify-center z-[1000]">
             <div className="bg-white rounded-2xl shadow-lg px-5 py-3.5 flex items-center gap-3">
@@ -140,7 +235,8 @@ export default function ResultsView({
           selectedFuel={selectedFuel}
           min={min}
           max={max}
-          onStationClick={setActiveStation}
+          activeStation={activeStation}
+          onStationClick={handleMapClick}
         />
 
         {/* Radius pills */}
@@ -183,7 +279,7 @@ export default function ResultsView({
       </div>
 
       {/* ── Right panel ──────────────────────────────────────────────────── */}
-      <div className="w-full lg:w-[380px] xl:w-[420px] flex-shrink-0 flex flex-col border-l border-slate-100 order-1 lg:order-2 overflow-hidden">
+      <div className="w-full lg:w-[400px] xl:w-[440px] flex-shrink-0 flex flex-col border-l border-slate-100 order-1 lg:order-2 overflow-hidden">
 
         {/* Panel header: count + sort */}
         <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between bg-white flex-shrink-0">
@@ -256,7 +352,7 @@ export default function ResultsView({
         )}
 
         {/* ── Station list ─────────────────────────────────────────────── */}
-        <div className="flex-1 overflow-y-auto">
+        <div ref={listRef} className="flex-1 overflow-y-auto">
           {!center && !loading && (
             <div className="flex flex-col items-center justify-center h-full text-slate-400 px-6 text-center">
               <MapPin className="w-8 h-8 mb-3 text-slate-200" />
@@ -293,76 +389,103 @@ export default function ResultsView({
             if (!priceObj) return null;
             const level = getPriceLevel(priceObj.value, min, max);
             const isActive = activeStation === station.id;
+            const isCompromis = station.id === compromisId && i > 0;
+            const brandName = station.brand && station.brand !== 'Indépendant' ? station.brand : null;
+            const displayName = brandName ?? station.address;
+            const displaySub = brandName ? station.address : station.city;
 
             return (
-              <button
+              <div
                 key={station.id}
-                onClick={() => setActiveStation(isActive ? null : station.id)}
-                className={`w-full text-left px-4 py-3.5 border-b border-slate-50 transition-colors ${
-                  isActive ? 'bg-orange-50' : 'hover:bg-slate-50'
+                ref={(el) => {
+                  if (el) cardRefs.current.set(station.id, el);
+                  else cardRefs.current.delete(station.id);
+                }}
+                className={`border-b border-slate-50 transition-colors ${
+                  isActive ? 'bg-orange-50' : 'hover:bg-slate-50/70'
                 }`}
               >
-                <div className="flex items-start gap-3">
-                  {/* Rank badge */}
-                  <div className={`flex-shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold ${
-                    i === 0 ? 'bg-yellow-100 text-yellow-700' :
-                    i === 1 ? 'bg-slate-100 text-slate-500' :
-                    i === 2 ? 'bg-orange-50 text-orange-500' :
-                    'bg-slate-50 text-slate-400'
-                  }`}>
-                    {i < 3 ? ['🥇','🥈','🥉'][i] : i + 1}
-                  </div>
-
-                  {/* Info */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      <span className="text-sm font-semibold text-slate-800 truncate max-w-[180px]">
-                        {station.address}
+                {/* Badges row */}
+                {(i === 0 || isCompromis) && (
+                  <div className="px-4 pt-2.5 flex gap-1.5">
+                    {i === 0 && (
+                      <span className="text-[10px] font-bold text-green-700 bg-green-50 border border-green-200 px-2 py-0.5 rounded-full">
+                        Moins cher
                       </span>
-                      {station.is24h && (
-                        <span className="flex items-center gap-0.5 text-[10px] font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100 flex-shrink-0">
-                          <Zap className="w-2.5 h-2.5" />24h
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2 mt-0.5 text-xs text-slate-400 flex-wrap">
-                      <span className="font-medium text-slate-500">{station.city}</span>
-                      {station.distance !== undefined && (
-                        <span className="text-orange-400 font-semibold">{formatDistance(station.distance)}</span>
-                      )}
-                      {station.brand && station.brand !== 'Indépendant' && (
-                        <span className="text-slate-400">{station.brand}</span>
-                      )}
-                    </div>
-
-                    {/* Service pills — show only when selected services match */}
-                    {selectedServices.size > 0 && (
-                      <div className="flex gap-1 mt-1 flex-wrap">
-                        {[...selectedServices].map((svc) => {
-                          const info = SERVICE_ICONS[svc] ?? { icon: '🔧', label: svc };
-                          return (
-                            <span key={svc} className="text-[9px] bg-orange-50 text-orange-500 border border-orange-100 px-1.5 py-0.5 rounded-full font-medium">
-                              {info.icon} {info.label}
-                            </span>
-                          );
-                        })}
-                      </div>
                     )}
-
-                    <div className="text-[10px] text-slate-300 mt-0.5">{formatDate(priceObj.updatedAt)}</div>
+                    {isCompromis && (
+                      <span className="text-[10px] font-bold text-violet-700 bg-violet-50 border border-violet-200 px-2 py-0.5 rounded-full">
+                        Meilleur compromis
+                      </span>
+                    )}
                   </div>
+                )}
 
-                  {/* Price */}
-                  <div className={`flex-shrink-0 px-3 py-2 rounded-xl border text-center min-w-[68px] ${PRICE_STYLES[level]}`}>
-                    <div className="text-lg font-black leading-tight">{priceObj.value.toFixed(3)}</div>
-                    <div className="text-[10px] font-medium opacity-60">€/L</div>
+                <button
+                  onClick={() => setActiveStation(isActive ? null : station.id)}
+                  className="w-full text-left px-4 py-3"
+                >
+                  <div className="flex items-start gap-3">
+                    {/* Rank badge */}
+                    <div className={`flex-shrink-0 w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold ${
+                      i === 0 ? 'bg-yellow-100 text-yellow-700' :
+                      i === 1 ? 'bg-slate-100 text-slate-500' :
+                      i === 2 ? 'bg-orange-50 text-orange-500' :
+                      'bg-slate-50 text-slate-400'
+                    }`}>
+                      {i < 3 ? ['🥇','🥈','🥉'][i] : i + 1}
+                    </div>
+
+                    {/* Info */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-sm font-bold text-slate-800 truncate max-w-[160px]">
+                          {displayName}
+                        </span>
+                        {station.is24h && (
+                          <span className="flex items-center gap-0.5 text-[10px] font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100 flex-shrink-0">
+                            <Zap className="w-2.5 h-2.5" />24h
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs text-slate-400 mt-0.5 truncate">{displaySub}</div>
+                      <div className="flex items-center gap-2 mt-0.5 text-xs flex-wrap">
+                        <span className="text-slate-400">{station.city}</span>
+                        {station.distance !== undefined && (
+                          <span className="text-orange-400 font-semibold">{formatDistance(station.distance)}</span>
+                        )}
+                      </div>
+
+                      {/* Active service pills */}
+                      {selectedServices.size > 0 && (
+                        <div className="flex gap-1 mt-1 flex-wrap">
+                          {[...selectedServices].map((svc) => {
+                            const info = SERVICE_ICONS[svc] ?? { icon: '🔧', label: svc };
+                            return (
+                              <span key={svc} className="text-[9px] bg-orange-50 text-orange-500 border border-orange-100 px-1.5 py-0.5 rounded-full font-medium">
+                                {info.icon} {info.label}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      <div className="text-[10px] text-slate-300 mt-0.5">{formatDate(priceObj.updatedAt)}</div>
+                    </div>
+
+                    {/* Price */}
+                    <div className={`flex-shrink-0 px-3 py-2 rounded-xl border text-center min-w-[68px] ${PRICE_STYLES[level]}`}>
+                      <div className="text-lg font-black leading-tight">{priceObj.value.toFixed(3)}</div>
+                      <div className="text-[10px] font-medium opacity-60">€/L</div>
+                    </div>
                   </div>
-                </div>
+                </button>
 
-                {/* Expanded: all prices + all services */}
+                {/* Expanded: all prices + services + itinerary */}
                 {isActive && (
-                  <div className="mt-3 pt-3 border-t border-orange-100 ml-10">
-                    <div className="grid grid-cols-3 gap-1.5 mb-2">
+                  <div className="px-4 pb-4 ml-10">
+                    {/* All fuel prices */}
+                    <div className="grid grid-cols-3 gap-1.5 mb-3">
                       {Object.entries(station.prices).map(([fuel, p]) => (
                         <div key={fuel} className="bg-white rounded-lg p-2 border border-slate-100 text-center">
                           <div className="text-[10px] text-slate-400">{fuel}</div>
@@ -370,8 +493,10 @@ export default function ResultsView({
                         </div>
                       ))}
                     </div>
+
+                    {/* Services */}
                     {station.services.length > 0 && (
-                      <div className="flex flex-wrap gap-1">
+                      <div className="flex flex-wrap gap-1 mb-3">
                         {station.services.map((svc) => {
                           const info = SERVICE_ICONS[svc] ?? { icon: '🔧', label: svc };
                           return (
@@ -382,9 +507,34 @@ export default function ResultsView({
                         })}
                       </div>
                     )}
+
+                    {/* Itinerary buttons */}
+                    <div className="flex gap-2 flex-wrap">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); openItinerary(station, 'gmaps'); }}
+                        className="flex items-center gap-1.5 px-3 py-2 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-700 transition-colors"
+                      >
+                        <Navigation className="w-3.5 h-3.5" />
+                        Google Maps
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); openItinerary(station, 'waze'); }}
+                        className="flex items-center gap-1.5 px-3 py-2 bg-sky-500 text-white rounded-xl text-xs font-bold hover:bg-sky-400 transition-colors"
+                      >
+                        <ExternalLink className="w-3 h-3" />
+                        Waze
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); openItinerary(station, 'apple'); }}
+                        className="flex items-center gap-1.5 px-3 py-2 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold hover:bg-slate-200 transition-colors"
+                      >
+                        <Navigation className="w-3 h-3" />
+                        Plans (iOS)
+                      </button>
+                    </div>
                   </div>
                 )}
-              </button>
+              </div>
             );
           })}
         </div>

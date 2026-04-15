@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -15,9 +15,20 @@ L.Icon.Default.mergeOptions({
   shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
 });
 
-function createPriceIcon(price: number, min: number, max: number, is24h: boolean, rank: number): L.DivIcon {
+function createPriceIcon(
+  price: number,
+  min: number,
+  max: number,
+  rank: number,
+  isActive: boolean,
+): L.DivIcon {
   const color = getPriceColor(price, min, max);
   const isTop = rank === 0;
+  const scale = isActive ? 'scale(1.25)' : isTop ? 'scale(1.1)' : 'scale(1)';
+  const ring = isActive
+    ? `box-shadow: 0 0 0 3px white, 0 0 0 5px ${color}, 0 4px 16px ${color}88;`
+    : `box-shadow: 0 3px 12px ${color}55;`;
+
   return L.divIcon({
     className: '',
     html: `
@@ -29,13 +40,14 @@ function createPriceIcon(price: number, min: number, max: number, is24h: boolean
         font-weight: 800;
         font-size: ${isTop ? '13px' : '12px'};
         white-space: nowrap;
-        box-shadow: 0 3px 12px ${color}55;
+        ${ring}
         border: 2px solid rgba(255,255,255,0.9);
         position: relative;
         font-family: -apple-system, sans-serif;
         cursor: pointer;
-        transform: ${isTop ? 'scale(1.1)' : 'scale(1)'};
+        transform: ${scale};
         transform-origin: bottom center;
+        transition: transform 0.15s ease;
       ">
         ${isTop ? '⭐ ' : ''}${price.toFixed(3)}€
         <div style="
@@ -56,7 +68,27 @@ function createPriceIcon(price: number, min: number, max: number, is24h: boolean
 
 function FlyTo({ lat, lon }: { lat: number; lon: number }) {
   const map = useMap();
-  useEffect(() => { map.flyTo([lat, lon], 13, { duration: 1.2 }); }, [lat, lon, map]);
+  const prevRef = useRef<{ lat: number; lon: number } | null>(null);
+  useEffect(() => {
+    const prev = prevRef.current;
+    if (!prev || prev.lat !== lat || prev.lon !== lon) {
+      map.flyTo([lat, lon], 13, { duration: 1.2 });
+      prevRef.current = { lat, lon };
+    }
+  }, [lat, lon, map]);
+  return null;
+}
+
+/** Pan to a station without zooming in/out aggressively */
+function PanToActive({ station }: { station: Station | null }) {
+  const map = useMap();
+  const prevRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!station || station.id === prevRef.current) return;
+    prevRef.current = station.id;
+    const currentZoom = map.getZoom();
+    map.flyTo([station.lat, station.lon], Math.max(currentZoom, 14), { duration: 0.8 });
+  }, [station, map]);
   return null;
 }
 
@@ -67,13 +99,20 @@ interface Props {
   selectedFuel: string;
   min: number;
   max: number;
+  activeStation?: string | null;
   onStationClick?: (id: string) => void;
 }
 
-export default function MapView({ stations, center, radius, selectedFuel, min, max, onStationClick }: Props) {
+export default function MapView({
+  stations, center, radius, selectedFuel, min, max, activeStation, onStationClick,
+}: Props) {
   const [mounted, setMounted] = useState(false);
   useEffect(() => { setMounted(true); }, []);
   if (!mounted) return null;
+
+  const activeStationObj = activeStation
+    ? stations.find((s) => s.id === activeStation) ?? null
+    : null;
 
   return (
     <MapContainer
@@ -113,14 +152,19 @@ export default function MapView({ stations, center, radius, selectedFuel, min, m
         </>
       )}
 
+      {/* Pan map when a station is selected from the list */}
+      {activeStationObj && <PanToActive station={activeStationObj} />}
+
       {stations.map((station, i) => {
         const priceObj = resolvePrice(station.prices, selectedFuel);
         if (!priceObj) return null;
+        const isActive = station.id === activeStation;
         return (
           <Marker
             key={station.id}
             position={[station.lat, station.lon]}
-            icon={createPriceIcon(priceObj.value, min, max, station.is24h, i)}
+            icon={createPriceIcon(priceObj.value, min, max, i, isActive)}
+            zIndexOffset={isActive ? 1000 : 0}
             eventHandlers={{ click: () => onStationClick?.(station.id) }}
           >
             <Popup minWidth={220} maxWidth={280}>
@@ -138,6 +182,14 @@ function PopupCard({ station, selectedFuel, min, max, rank }: {
 }) {
   const priceObj = resolvePrice(station.prices, selectedFuel);
   const color = priceObj ? getPriceColor(priceObj.value, min, max) : '#94a3b8';
+  const brandName = station.brand && station.brand !== 'Indépendant' ? station.brand : null;
+
+  function openNav(mode: 'gmaps' | 'waze') {
+    const url = mode === 'waze'
+      ? `https://waze.com/ul?ll=${station.lat},${station.lon}&navigate=yes`
+      : `https://www.google.com/maps/dir/?api=1&destination=${station.lat},${station.lon}`;
+    window.open(url, '_blank', 'noopener,noreferrer');
+  }
 
   return (
     <div style={{ padding: '14px', minWidth: '200px' }}>
@@ -147,14 +199,18 @@ function PopupCard({ station, selectedFuel, min, max, rank }: {
         </div>
       )}
       <div style={{ fontWeight: 700, fontSize: '14px', color: '#0f172a', lineHeight: '1.3', marginBottom: '2px' }}>
-        {station.brand && station.brand !== 'Indépendant' ? station.brand : station.address}
+        {brandName ?? station.address}
       </div>
-      <div style={{ color: '#64748b', fontSize: '12px', marginBottom: '2px' }}>
-        {station.brand && station.brand !== 'Indépendant' ? station.address : ''}
-      </div>
+      {brandName && (
+        <div style={{ color: '#64748b', fontSize: '12px', marginBottom: '2px' }}>
+          {station.address}
+        </div>
+      )}
       <div style={{ color: '#64748b', fontSize: '12px', marginBottom: '10px' }}>
         {station.city} {station.zipCode}
-        {station.distance !== undefined && <span style={{ color: '#f97316', marginLeft: '6px' }}>{formatDistance(station.distance)}</span>}
+        {station.distance !== undefined && (
+          <span style={{ color: '#f97316', marginLeft: '6px' }}>{formatDistance(station.distance)}</span>
+        )}
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '10px' }}>
@@ -170,16 +226,29 @@ function PopupCard({ station, selectedFuel, min, max, rank }: {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px', marginBottom: '10px' }}>
         {Object.entries(station.prices).slice(0, 4).map(([fuel, p]) => (
-          <div key={fuel} style={{
-            background: '#f8fafc', borderRadius: '8px', padding: '6px 8px',
-            border: '1px solid #e2e8f0'
-          }}>
+          <div key={fuel} style={{ background: '#f8fafc', borderRadius: '8px', padding: '6px 8px', border: '1px solid #e2e8f0' }}>
             <div style={{ fontSize: '10px', color: '#94a3b8' }}>{fuel}</div>
             <div style={{ fontSize: '13px', fontWeight: 700, color: '#334155' }}>{p.value.toFixed(3)}€</div>
           </div>
         ))}
+      </div>
+
+      {/* Navigation buttons */}
+      <div style={{ display: 'flex', gap: '6px' }}>
+        <button
+          onClick={() => openNav('gmaps')}
+          style={{ flex: 1, background: '#0f172a', color: 'white', border: 'none', borderRadius: '10px', padding: '8px', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}
+        >
+          Google Maps
+        </button>
+        <button
+          onClick={() => openNav('waze')}
+          style={{ flex: 1, background: '#00cce5', color: 'white', border: 'none', borderRadius: '10px', padding: '8px', fontSize: '11px', fontWeight: 700, cursor: 'pointer' }}
+        >
+          Waze
+        </button>
       </div>
 
       {priceObj?.updatedAt && (

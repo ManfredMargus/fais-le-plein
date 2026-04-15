@@ -45,26 +45,46 @@ export function getPriceColor(price: number, min: number, max: number): string {
 }
 
 const BRAND_PATTERNS: [RegExp, string][] = [
+  // Grande distribution
   [/leclerc/i, 'E.Leclerc'],
   [/intermarch[eé]/i, 'Intermarché'],
-  [/carrefour/i, 'Carrefour'],
+  [/carrefour\s*(?:market|express|contact|city)?/i, 'Carrefour'],
   [/casino/i, 'Casino'],
+  [/super\s*u\b|hyper\s*u\b/i, 'Super U'],
+  [/système\s*u|systeme\s*u|\bsystemu\b/i, 'Système U'],
+  [/\bmarch[eé]\s*u\b/i, 'Système U'],
+  [/\bu\s*express\b/i, 'Système U'],
+  [/\bspar\b/i, 'Spar'],
+  [/\blidl\b/i, 'Lidl'],
+  [/\baldi\b/i, 'Aldi'],
+  [/\bnetto\b/i, 'Netto'],
+  [/\bcora\b/i, 'Cora'],
+  [/\bgeant\s*casino|g[eé]ant\s*casino/i, 'Géant Casino'],
+  [/\bmonoprix\b/i, 'Monoprix'],
+  [/\bfrançais\s*des\s*p[eé]troles|franprix/i, 'Franprix'],
+  // Pétrolières
   [/totalenergies|total\b/i, 'TotalEnergies'],
   [/bp\b/i, 'BP'],
   [/esso/i, 'Esso'],
   [/shell/i, 'Shell'],
-  [/avia/i, 'Avia'],
-  [/système\s*u|systeme\s*u|\bsystemu\b/i, 'Système U'],
-  [/\bspar\b/i, 'Spar'],
-  [/\blidl\b/i, 'Lidl'],
-  [/\baldi\b/i, 'Aldi'],
-  [/\bneoness\b/i, 'Neoness'],
-  [/\bvito\b/i, 'Vito'],
   [/\bQ8\b/i, 'Q8'],
-  [/\bgulp\b/i, 'Gulp'],
+  [/\bjet\b/i, 'JET'],
+  [/\bapi\b/i, 'Api'],
+  [/\bvito\b/i, 'Vito'],
+  // Indépendants connus
+  [/avia/i, 'Avia'],
   [/\bprimoil\b/i, 'Primoil'],
   [/\bor[eé]a\b/i, 'Oréa'],
+  [/\bneoness\b/i, 'Neoness'],
+  [/\bgulp\b/i, 'Gulp'],
+  [/\brelais\s*vert\b/i, 'Relais Vert'],
+  [/\bstation\s*v\b/i, 'Station V'],
+  [/\bpetroplus\b/i, 'Petroplus'],
+  // Autoroutes
   [/autoroute|aire\s+de/i, 'Autoroute'],
+  [/\bvinci\b/i, 'Vinci Autoroutes'],
+  [/\bcofiroute\b/i, 'Cofiroute'],
+  [/\bsanef\b/i, 'Sanef'],
 ];
 
 export function detectBrand(address: string, city: string): string {
