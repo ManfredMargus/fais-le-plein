@@ -5,7 +5,7 @@ import Navigation from '@/components/Navigation';
 import HeroSection from '@/components/HeroSection';
 import ResultsView from '@/components/ResultsView';
 import BrandDashboard from '@/components/BrandDashboard';
-import { Station } from '@/lib/types';
+import { Station, FUELS } from '@/lib/types';
 import { ExternalLink, Heart } from 'lucide-react';
 
 interface GlobalStats {
@@ -64,9 +64,10 @@ export default function Home() {
     if (center) fetchStations(center.lat, center.lon, selectedFuel, r);
   }, [center, selectedFuel, fetchStations]);
 
-  // Active station count = stations with at least one price (use most common fuel)
-  const activeCount = globalStats
-    ? Math.max(...Object.values(globalStats.fuelStats).map((f) => f.count))
+  // Active station count = stations with a price for the selected fuel
+  const currentFuelDef = FUELS.find((f) => f.key === selectedFuel);
+  const activeCount = globalStats && currentFuelDef
+    ? Math.max(...currentFuelDef.apiKeys.map((k) => globalStats.fuelStats[k]?.count ?? 0))
     : 0;
 
   if (hasSearched) {
@@ -96,7 +97,7 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-[#f8fafc]">
+    <div className="min-h-screen bg-white">
       <Navigation
         selectedFuel={selectedFuel}
         onFuelChange={handleFuelChange}

@@ -120,9 +120,9 @@ function computeBrandStats(stations: Station[], fuelKey: string) {
   }
   return Object.entries(brands)
     .map(([brand, { count, total }]) => ({ brand, count, avg: +(total / count).toFixed(3) }))
-    .filter((b) => b.count >= 5)
+    .filter((b) => b.count >= 3)
     .sort((a, b) => a.avg - b.avg)
-    .slice(0, 15);
+    .slice(0, 20);
 }
 
 function computeDepartmentStats(stations: Station[], fuelKey: string) {

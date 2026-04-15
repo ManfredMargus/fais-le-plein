@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Search, MapPin, Loader2, TrendingDown, Zap, Shield, ChevronRight, Flame, Car } from 'lucide-react';
+import { Search, MapPin, Loader2, TrendingDown, Shield, ChevronRight, Flame } from 'lucide-react';
 import { FUELS } from '@/lib/types';
 
 interface Props {
@@ -42,9 +42,6 @@ export default function HeroSection({ globalStats, totalStations, selectedFuel, 
   const [address, setAddress] = useState('');
   const [searching, setSearching] = useState(false);
   const [geoLoading, setGeoLoading] = useState(false);
-  const [plate, setPlate] = useState('');
-  const [plateLoading, setPlateLoading] = useState(false);
-
   const currentFuel = FUELS.find((f) => f.key === selectedFuel);
 
   const getStatFor = (field: 'avg' | 'min' | 'max' | 'count'): number | null => {
@@ -60,22 +57,6 @@ export default function HeroSection({ globalStats, totalStations, selectedFuel, 
   const minPrice = getStatFor('min');
   const maxPrice = getStatFor('max');
   const count = getStatFor('count');
-
-  const handlePlate = async () => {
-    const cleaned = plate.replace(/[\s-]/g, '').toUpperCase();
-    if (!cleaned) return;
-    setPlateLoading(true);
-    try {
-      const res = await fetch(`/api/plaque?immat=${encodeURIComponent(cleaned)}`);
-      const data = await res.json();
-      if (data.fuel) onFuelChange(data.fuel);
-      if (data.label) alert(`${data.label} → ${data.fuelLabel ?? data.fuel} sélectionné`);
-    } catch {
-      alert('Impossible de récupérer les infos du véhicule.');
-    } finally {
-      setPlateLoading(false);
-    }
-  };
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -108,10 +89,21 @@ export default function HeroSection({ globalStats, totalStations, selectedFuel, 
   };
 
   return (
-    <section className="min-h-screen flex flex-col items-center justify-center px-4 pt-20 pb-16 bg-gradient-to-b from-white via-[#f8fafc] to-[#f1f5f9]">
+    <section className="relative min-h-screen flex flex-col items-center justify-center px-4 pt-20 pb-16 overflow-hidden">
+
+      {/* Background gradient */}
+      <div className="absolute inset-0 bg-gradient-to-br from-orange-50 via-white to-amber-50/40" />
+
+      {/* Decorative blobs */}
+      <div className="absolute -top-32 -left-32 w-[500px] h-[500px] bg-orange-400/[0.08] rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute top-1/3 -right-40 w-[420px] h-[420px] bg-amber-400/[0.10] rounded-full blur-3xl pointer-events-none" />
+      <div className="absolute -bottom-20 left-1/3 w-[380px] h-[380px] bg-red-400/[0.06] rounded-full blur-3xl pointer-events-none" />
+
+      {/* All content above blobs */}
+      <div className="relative z-10 w-full flex flex-col items-center">
 
       {/* Live badge */}
-      <div className="inline-flex items-center gap-2 bg-orange-50 border border-orange-200 text-orange-600 text-xs font-bold px-4 py-2 rounded-full mb-8 shadow-sm">
+      <div className="inline-flex items-center gap-2 bg-white/90 backdrop-blur-sm border border-orange-200 text-orange-600 text-xs font-bold px-4 py-2 rounded-full mb-8 shadow-sm shadow-orange-100/60">
         <span className="w-2 h-2 bg-orange-500 rounded-full animate-pulse" />
         Mis à jour en temps réel · données officielles
       </div>
@@ -120,12 +112,14 @@ export default function HeroSection({ globalStats, totalStations, selectedFuel, 
       <h1 className="text-4xl sm:text-6xl lg:text-7xl font-black text-slate-900 leading-[1.05] mb-4 text-center tracking-tight">
         Payez moins cher
         <br />
-        <span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-500 to-red-500">
+        <span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-500 via-red-500 to-rose-500">
           à chaque plein
         </span>
       </h1>
       <p className="text-slate-500 text-base sm:text-lg mb-10 text-center max-w-md">
-        Comparez les prix de {totalStations.toLocaleString('fr-FR')} stations en France en temps réel
+        Comparez les prix de{' '}
+        <span className="font-bold text-slate-700">{totalStations.toLocaleString('fr-FR')} stations</span>{' '}
+        en France en temps réel
       </p>
 
       {/* ── Main search card ─────────────────────────────────────────────── */}
@@ -189,27 +183,6 @@ export default function HeroSection({ globalStats, totalStations, selectedFuel, 
           </button>
         </form>
 
-        {/* Plate lookup */}
-        <div className="mt-3 flex items-center gap-2 bg-blue-50 border border-blue-100 rounded-xl px-3 py-2.5">
-          <Car className="w-4 h-4 text-blue-400 flex-shrink-0" />
-          <input
-            type="text"
-            value={plate}
-            onChange={(e) => setPlate(e.target.value.toUpperCase())}
-            onKeyDown={(e) => e.key === 'Enter' && handlePlate()}
-            placeholder="Ma plaque : AB-123-CD"
-            maxLength={9}
-            className="flex-1 bg-transparent text-sm font-mono font-bold text-slate-700 placeholder-slate-400 focus:outline-none uppercase tracking-widest"
-          />
-          <button
-            onClick={handlePlate}
-            disabled={!plate.trim() || plateLoading}
-            className="px-3 py-1 bg-blue-500 text-white text-xs font-bold rounded-lg hover:bg-blue-400 disabled:opacity-40 transition-colors flex-shrink-0"
-          >
-            {plateLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Quel carburant ?'}
-          </button>
-        </div>
-
         {/* Geolocation + quick cities */}
         <div className="flex flex-col items-center gap-3 mt-4">
           <button
@@ -243,14 +216,14 @@ export default function HeroSection({ globalStats, totalStations, selectedFuel, 
       {/* ── Stats row ────────────────────────────────────────────────────── */}
       {avg && (
         <div className="mt-14 w-full max-w-2xl grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div className="bg-white rounded-2xl p-4 text-center shadow-sm border border-slate-100 col-span-2 sm:col-span-1">
+          <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-4 text-center shadow-sm border border-slate-100 col-span-2 sm:col-span-1">
             <div className="text-2xl font-black text-slate-900">
               <Counter value={avg} decimals={3} />€
             </div>
             <div className="text-xs text-slate-400 mt-1">Prix moyen France</div>
             <div className="text-[10px] text-slate-300 mt-0.5">{currentFuel?.label}</div>
           </div>
-          <div className="bg-white rounded-2xl p-4 text-center shadow-sm border border-green-100">
+          <div className="bg-gradient-to-br from-green-50 to-emerald-50/80 backdrop-blur-sm rounded-2xl p-4 text-center shadow-sm border border-green-100">
             <div className="flex items-center justify-center gap-1">
               <TrendingDown className="w-4 h-4 text-green-500" />
               <span className="text-2xl font-black text-green-600">
@@ -260,7 +233,7 @@ export default function HeroSection({ globalStats, totalStations, selectedFuel, 
             <div className="text-xs text-slate-400 mt-1">Meilleur prix</div>
             <div className="text-[10px] text-slate-300 mt-0.5">n'importe où en France</div>
           </div>
-          <div className="bg-white rounded-2xl p-4 text-center shadow-sm border border-slate-100">
+          <div className="bg-gradient-to-br from-blue-50 to-indigo-50/80 backdrop-blur-sm rounded-2xl p-4 text-center shadow-sm border border-blue-100">
             <div className="flex items-center justify-center gap-1">
               <Shield className="w-4 h-4 text-blue-400" />
               <span className="text-2xl font-black text-blue-600">
@@ -269,7 +242,7 @@ export default function HeroSection({ globalStats, totalStations, selectedFuel, 
             </div>
             <div className="text-xs text-slate-400 mt-1">Stations actives</div>
           </div>
-          <div className="bg-white rounded-2xl p-4 text-center shadow-sm border border-slate-100">
+          <div className="bg-gradient-to-br from-orange-50 to-amber-50/80 backdrop-blur-sm rounded-2xl p-4 text-center shadow-sm border border-orange-100">
             <div className="flex items-center justify-center gap-1">
               <Flame className="w-4 h-4 text-orange-400" />
               <span className="text-2xl font-black text-orange-500">
@@ -282,9 +255,8 @@ export default function HeroSection({ globalStats, totalStations, selectedFuel, 
         </div>
       )}
 
-
       {/* ── Feature bullets ─────────────────────────────────────────────── */}
-      <div className="mt-10 flex flex-wrap justify-center gap-4 text-sm text-slate-400">
+      <div className="mt-10 flex flex-wrap justify-center gap-3 text-sm">
         {[
           { icon: '⚡', text: 'Données en temps réel' },
           { icon: '🗺️', text: 'Carte interactive' },
@@ -292,12 +264,14 @@ export default function HeroSection({ globalStats, totalStations, selectedFuel, 
           { icon: '🏷️', text: 'Toutes les enseignes' },
           { icon: '📱', text: '100% mobile' },
         ].map(({ icon, text }) => (
-          <div key={text} className="flex items-center gap-1.5 font-medium">
+          <div key={text} className="flex items-center gap-1.5 font-medium text-slate-500 bg-white/70 backdrop-blur-sm border border-slate-200/60 px-3 py-1.5 rounded-full shadow-sm">
             <span>{icon}</span>
             <span>{text}</span>
           </div>
         ))}
       </div>
+
+      </div>{/* end relative z-10 */}
     </section>
   );
 }

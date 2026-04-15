@@ -176,8 +176,8 @@ export default function BrandDashboard({ globalStats }: Props) {
               <Loader2 className="w-6 h-6 animate-spin text-orange-400" />
             </div>
           ) : (
-            <ResponsiveContainer width="100%" height={320}>
-              <BarChart data={data.slice(0, 15)} layout="vertical" margin={{ top: 4, right: 40, left: 0, bottom: 4 }}>
+            <ResponsiveContainer width="100%" height={Math.max(320, data.length * 38)}>
+              <BarChart data={data} layout="vertical" margin={{ top: 4, right: 40, left: 0, bottom: 4 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" horizontal={false} />
                 <XAxis type="number" domain={[min * 0.997, max * 1.003]} tick={{ fill: '#94a3b8', fontSize: 11 }}
                   axisLine={false} tickLine={false} tickFormatter={(v) => `${v.toFixed(2)}€`} />
@@ -193,7 +193,7 @@ export default function BrandDashboard({ globalStats }: Props) {
                   cursor={{ fill: 'rgba(0,0,0,0.03)' }}
                 />
                 <Bar dataKey="avg" radius={[0, 6, 6, 0]} maxBarSize={18}>
-                  {data.slice(0, 15).map((d, i) => <Cell key={i} fill={color(d.avg)} />)}
+                  {data.map((d, i) => <Cell key={i} fill={color(d.avg)} />)}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
